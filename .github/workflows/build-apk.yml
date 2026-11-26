@@ -17,19 +17,26 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract Android project
+      - name: Extract project
         run: |
           mkdir extracted
           unzip -o *.zip -d extracted
-          find extracted -name settings.gradle -o -name settings.gradle.kts
+          PROJECT=$(find extracted -name settings.gradle -type f | head -n 1 | xargs dirname)
+          echo "PROJECT=$PROJECT" >> $GITHUB_ENV
+
+      - name: Fix Java code
+        run: |
+          FILE=$(find "$PROJECT" -name MainActivity.java | head -n 1)
+          sed -i 's/(WebView)findViewById(android.R.id.content).getChildAt(0)/(WebView)((ViewGroup)findViewById(android.R.id.content)).getChildAt(0)/' "$FILE"
+          sed -i '/^package /a import android.view.ViewGroup;' "$FILE"
 
       - name: Build APK
         run: |
-          cd extracted/PrimeTechAndroid
+          cd "$PROJECT"
           gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Prime-Tech-Systems-APK
-          path: extracted/PrimeTechAndroid/app/build/outputs/apk/debug/*.apk
+          path: ${{ env.PROJECT }}/app/build/outputs/apk/debug/*.apk
