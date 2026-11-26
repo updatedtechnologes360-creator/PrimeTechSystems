@@ -1,0 +1,35 @@
+name: Build Prime Tech Systems APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Extract Android project
+        run: |
+          mkdir extracted
+          unzip -o *.zip -d extracted
+          find extracted -name settings.gradle -o -name settings.gradle.kts
+
+      - name: Build APK
+        run: |
+          cd extracted/PrimeTechAndroid
+          gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prime-Tech-Systems-APK
+          path: extracted/PrimeTechAndroid/app/build/outputs/apk/debug/*.apk
