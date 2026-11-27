@@ -1,42 +1,443 @@
-name: Build Prime Tech Systems APK
+
+name: Build PTS Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract project
-        run: |
-          mkdir extracted
-          unzip -o *.zip -d extracted
-          PROJECT=$(find extracted -name settings.gradle -type f | head -n 1 | xargs dirname)
-          echo "PROJECT=$PROJECT" >> $GITHUB_ENV
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Fix Java code
+      - name: Create Android Project
         run: |
-          FILE=$(find "$PROJECT" -name MainActivity.java | head -n 1)
-          sed -i 's/(WebView)findViewById(android.R.id.content).getChildAt(0)/(WebView)((ViewGroup)findViewById(android.R.id.content)).getChildAt(0)/' "$FILE"
-          sed -i '/^package /a import android.view.ViewGroup;' "$FILE"
+          mkdir -p PTS/app/src/main/assets
+          mkdir -p PTS/app/src/main/java/com/pts/app
+
+          cd PTS
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "PTS"
+          include ':app'
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.pts.app'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.pts.app'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:label="PTS"
+                  android:usesCleartextTraffic="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/pts/app/MainActivity.java <<'EOF'
+          package com.pts.app;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebSettings;
+
+          public class MainActivity extends Activity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  WebView web = new WebView(this);
+                  WebSettings settings = web.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setAllowFileAccess(true);
+
+                  web.setWebChromeClient(
+                      new android.webkit.WebChromeClient()
+                  );
+
+                  web.loadUrl("file:///android_asset/index.html");
+                  setContentView(web);
+              }
+          }
+          EOF
+
+          cat > app/src/main/assets/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta charset="UTF-8">
+          <title>PTS</title>
+          <style>
+          *{box-sizing:border-box}
+          body{margin:0;background:#eef2ff;font-family:Arial;color:#172554}
+          header{background:linear-gradient(135deg,#111c54,#2563eb);
+          color:white;padding:25px 20px;border-radius:0 0 25px 25px}
+          header h1{margin:0;font-size:25px}
+          header p{margin:8px 0}
+          .wrap{padding:16px}
+          .card{background:white;padding:18px;margin-bottom:14px;
+          border-radius:18px;box-shadow:0 3px 12px #0001}
+          .balance{background:linear-gradient(135deg,#0d9488,#059669);
+          color:white}
+          .stats{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+          .stats .card{margin:0}
+          h3{margin-top:0}
+          button{background:#2563eb;color:white;border:0;
+          padding:12px;border-radius:12px;font-weight:bold;margin:4px 2px}
+          input,select{width:100%;padding:12px;margin:6px 0;
+          border:1px solid #cbd5e1;border-radius:10px;
+          background:white;font-size:16px}
+          .nav{display:flex;flex-wrap:wrap;gap:3px}
+          .nav button{font-size:12px}
+          .item{border-bottom:1px solid #eee;padding:12px 0}
+          .green{color:#059669}.red{color:#dc2626}
+          .small{font-size:13px;color:#64748b}
+          </style>
+          </head>
+          <body>
+          <header>
+          <h1>PTS | Prime Tech Systems</h1>
+          <p>Company Management System</p>
+          <p>Abu Dhabi, UAE</p>
+          </header>
+
+          <div class="wrap">
+          <div class="card balance">
+          <div>Net Balance</div>
+          <h1 id="bal">AED 0.00</h1>
+          <div>Prime Tech Systems</div>
+          </div>
+
+          <div class="stats">
+          <div class="card">
+          <div>Total Income</div>
+          <h3 class="green" id="inc">AED 0</h3>
+          </div>
+          <div class="card">
+          <div>Total Expense</div>
+          <h3 class="red" id="exp">AED 0</h3>
+          </div>
+          </div>
+
+          <div class="card">
+          <div class="nav">
+          <button onclick="show('home')">Dashboard</button>
+          <button onclick="show('income')">Income</button>
+          <button onclick="show('expense')">Expense</button>
+          <button onclick="show('project')">Projects</button>
+          <button onclick="show('labour')">Labour</button>
+          <button onclick="show('staff')">Staff</button>
+          <button onclick="show('client')">Clients</button>
+          </div>
+          </div>
+
+          <section id="home">
+          <div class="card">
+          <h3>Welcome to PTS</h3>
+          <p>Manage your business income, expenses,
+          projects, labour and staff.</p>
+          <p>All amounts are in AED.</p>
+          </div>
+          <div class="card">
+          <h3>Recent Records</h3>
+          <div id="recent"></div>
+          </div>
+          </section>
+
+          <section id="income" hidden>
+          <div class="card">
+          <h3>Add Income</h3>
+          <input id="inTitle" placeholder="Income description">
+          <input id="inAmount" type="number" placeholder="Amount AED">
+          <input id="inDate" type="date">
+          <button onclick="add('income')">Save Income</button>
+          </div>
+          </section>
+
+          <section id="expense" hidden>
+          <div class="card">
+          <h3>Add Expense</h3>
+          <input id="exTitle" placeholder="Expense description">
+          <input id="exAmount" type="number" placeholder="Amount AED">
+          <select id="exCat">
+          <option>Materials</option>
+          <option>Salary</option>
+          <option>Labour</option>
+          <option>Transport</option>
+          <option>Tools</option>
+          <option>Office</option>
+          <option>Other</option>
+          </select>
+          <input id="exDate" type="date">
+          <button onclick="add('expense')">Save Expense</button>
+          </div>
+          </section>
+
+          <section id="project" hidden>
+          <div class="card">
+          <h3>Projects / Sites</h3>
+          <input id="pName" placeholder="Project name">
+          <input id="pClient" placeholder="Client name">
+          <input id="pLoc" placeholder="Site location">
+          <button onclick="saveProject()">Save Project</button>
+          <div id="plist"></div>
+          </div>
+          </section>
+
+          <section id="labour" hidden>
+          <div class="card">
+          <h3>Labour Ledger</h3>
+          <input id="lName" placeholder="Labour name">
+          <input id="lDays" type="number" placeholder="Days worked">
+          <input id="lRate" type="number" placeholder="Daily rate AED">
+          <input id="lAdv" type="number" placeholder="Advance / paid AED">
+          <button onclick="saveLabour()">Save Labour</button>
+          <div id="llist"></div>
+          </div>
+          </section>
+
+          <section id="staff" hidden>
+          <div class="card">
+          <h3>Staff Accounts</h3>
+          <input id="sName" placeholder="Staff name">
+          <input id="sUser" placeholder="Username">
+          <input id="sPass" placeholder="Password">
+          <select id="sRole">
+          <option>Admin</option>
+          <option>Accountant</option>
+          <option>Supervisor</option>
+          <option>Staff</option>
+          </select>
+          <button onclick="saveStaff()">Save Staff</button>
+          <div id="slist"></div>
+          <p class="small">Role records are stored locally.
+          Login and access restrictions are not yet implemented.</p>
+          </div>
+          </section>
+
+          <section id="client" hidden>
+          <div class="card">
+          <h3>Clients</h3>
+          <input id="cName" placeholder="Client name">
+          <input id="cPhone" placeholder="Phone number">
+          <button onclick="saveClient()">Save Client</button>
+          <div id="clist"></div>
+          </div>
+          </section>
+
+          <div class="card">
+          <button onclick="backup()">Export Backup</button>
+          <button onclick="csv()">Export CSV</button>
+          <button onclick="clearData()" style="background:#dc2626">
+          Delete All Data</button>
+          </div>
+          </div>
+
+          <script>
+          let data=JSON.parse(localStorage.getItem('pts')||
+          '{"income":[],"expense":[],"projects":[],"labour":[],"staff":[],"clients":[]}');
+
+          function persist(){
+          localStorage.setItem('pts',JSON.stringify(data));
+          render();
+          }
+
+          function money(n){
+          return 'AED '+Number(n||0).toFixed(2);
+          }
+
+          function show(id){
+          document.querySelectorAll('section').forEach(x=>x.hidden=true);
+          document.getElementById(id).hidden=false;
+          render();
+          }
+
+          function add(type){
+          let title=document.getElementById(type==='income'?'inTitle':'exTitle').value;
+          let amount=Number(document.getElementById(type==='income'?'inAmount':'exAmount').value);
+          let date=document.getElementById(type==='income'?'inDate':'exDate').value;
+          let cat=type==='expense'?document.getElementById('exCat').value:'Income';
+
+          if(!title||amount<=0){alert('Enter description and amount');return;}
+
+          data[type].push({title,amount,date:date||new Date().toISOString().slice(0,10),cat});
+          persist();
+          alert('Saved');
+          }
+
+          function saveProject(){
+          let name=document.getElementById('pName').value;
+          if(!name){alert('Enter project name');return;}
+          data.projects.push({name,client:document.getElementById('pClient').value,
+          loc:document.getElementById('pLoc').value});
+          persist();
+          document.getElementById('pName').value='';
+          }
+
+          function saveLabour(){
+          let name=document.getElementById('lName').value;
+          let days=Number(document.getElementById('lDays').value);
+          let rate=Number(document.getElementById('lRate').value);
+          let adv=Number(document.getElementById('lAdv').value);
+          if(!name){alert('Enter labour name');return;}
+          data.labour.push({name,days,rate,adv});
+          persist();
+          }
+
+          function saveStaff(){
+          let name=document.getElementById('sName').value;
+          if(!name){alert('Enter staff name');return;}
+          data.staff.push({name,user:document.getElementById('sUser').value,
+          pass:document.getElementById('sPass').value,
+          role:document.getElementById('sRole').value});
+          persist();
+          }
+
+          function saveClient(){
+          let name=document.getElementById('cName').value;
+          if(!name){alert('Enter client name');return;}
+          data.clients.push({name,phone:document.getElementById('cPhone').value});
+          persist();
+          }
+
+          function del(type,i){
+          if(confirm('Delete this record?')){
+          data[type].splice(i,1);persist();
+          }
+          }
+
+          function render(){
+          let income=data.income.reduce((s,x)=>s+x.amount,0);
+          let expense=data.expense.reduce((s,x)=>s+x.amount,0);
+          document.getElementById('inc').textContent=money(income);
+          document.getElementById('exp').textContent=money(expense);
+          document.getElementById('bal').textContent=money(income-expense);
+
+          let recent=[...data.income.map(x=>({...x,type:'income'})),
+          ...data.expense.map(x=>({...x,type:'expense'}))].reverse().slice(0,8);
+
+          document.getElementById('recent').innerHTML=recent.map(x=>
+          '<div class="item">'+x.title+' <b>'+money(x.amount)+'</b></div>').join('');
+
+          document.getElementById('plist').innerHTML=data.projects.map((x,i)=>
+          '<div class="item"><b>'+x.name+'</b><br>'+x.client+'<br>'+x.loc+
+          '<br><button onclick="del(\'projects\','+i+')">Delete</button></div>').join('');
+
+          document.getElementById('llist').innerHTML=data.labour.map((x,i)=>
+          '<div class="item"><b>'+x.name+'</b><br>Days: '+x.days+
+          '<br>Rate: '+money(x.rate)+'<br>Earned: '+money(x.days*x.rate)+
+          '<br>Paid: '+money(x.adv)+'<br>Balance: '+money(x.days*x.rate-x.adv)+
+          '<br><button onclick="del(\'labour\','+i+')">Delete</button></div>').join('');
+
+          document.getElementById('slist').innerHTML=data.staff.map((x,i)=>
+          '<div class="item">'+x.name+' - '+x.role+
+          '<br>Username: '+x.user+
+          '<br><button onclick="del(\'staff\','+i+')">Delete</button></div>').join('');
+
+          document.getElementById('clist').innerHTML=data.clients.map((x,i)=>
+          '<div class="item">'+x.name+' - '+x.phone+
+          '<br><button onclick="del(\'clients\','+i+')">Delete</button></div>').join('');
+          }
+
+          function backup(){
+          let b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+          let a=document.createElement('a');
+          a.href=URL.createObjectURL(b);a.download='PTS-backup.json';a.click();
+          }
+
+          function csv(){
+          let rows=[['Type','Description','Amount','Date','Category']];
+          data.income.forEach(x=>rows.push(['Income',x.title,x.amount,x.date,x.cat]));
+          data.expense.forEach(x=>rows.push(['Expense',x.title,x.amount,x.date,x.cat]));
+          let b=new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'});
+          let a=document.createElement('a');
+          a.href=URL.createObjectURL(b);a.download='PTS-report.csv';a.click();
+          }
+
+          function clearData(){
+          if(confirm('Delete all PTS data?')){
+          data={income:[],expense:[],projects:[],labour:[],staff:[],clients:[]};
+          persist();
+          }
+          }
+
+          render();
+          </script>
+          </body>
+          </html>
+          EOF
 
       - name: Build APK
         run: |
-          cd "$PROJECT"
+          cd PTS
           gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Prime-Tech-Systems-APK
-          path: ${{ env.PROJECT }}/app/build/outputs/apk/debug/*.apk
+          name: PTS-Android-APK
+          path: PTS/app/build/outputs/apk/debug/app-debug.apk
+          
